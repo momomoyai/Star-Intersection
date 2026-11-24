@@ -1,5 +1,6 @@
 import { parseScreenshotTsv } from './screenshot-import.js';
 
+const APP_VERSION = '0.2.1';
 const STORAGE = 'star-intersection-data-v1';
 const AUTH_STORAGE = 'star-intersection-auth-v1';
 const OWNER_STORAGE = 'star-intersection-sync-owner-v1';
@@ -151,6 +152,14 @@ function applyTemplate(){
   if(added)state.planDirty=true;state.planTab='week';render();toast(added?`Added ${added} template activities to draft`:'Template activities are already in this draft');
 }
 let tesseractPromise;
+function loadScreenshotImage(file){
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file),image=new Image();
+    image.onload=()=>{URL.revokeObjectURL(url);image.naturalWidth&&image.naturalHeight?resolve(image):reject(Error('Image has no readable pixels.'));};
+    image.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Image could not be opened. Try exporting it as PNG or JPEG.'));};
+    image.src=url;
+  });
+}
 function loadTesseract(){
   if(window.Tesseract)return Promise.resolve(window.Tesseract);
   if(!tesseractPromise)tesseractPromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';script.onload=()=>resolve(window.Tesseract);script.onerror=()=>reject(Error('OCR could not load. Connect to the internet and try again.'));document.head.appendChild(script);}).catch(err=>{tesseractPromise=null;throw err;});
@@ -164,13 +173,18 @@ async function importScreenshot(file){
   let worker;
   try{
     const Tesseract=await loadTesseract();
-    const image=await createImageBitmap(file);
-    const scale=Math.min(3,3000/Math.max(image.width,image.height));
-    const canvas=document.createElement('canvas');canvas.width=Math.round(image.width*scale);canvas.height=Math.round(image.height*scale);
-    canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);image.close();
+    const image=await loadScreenshotImage(file);
+    const gridCanvas=document.createElement('canvas');gridCanvas.width=image.naturalWidth;gridCanvas.height=image.naturalHeight;
+    const gridContext=gridCanvas.getContext('2d',{willReadFrequently:true});if(!gridContext)throw Error('Canvas is unavailable in this browser.');
+    gridContext.drawImage(image,0,0);
+    const gridImage=gridContext.getImageData(0,0,gridCanvas.width,gridCanvas.height);
+    const scale=Math.min(3,3000/Math.max(image.naturalWidth,image.naturalHeight));
+    const canvas=document.createElement('canvas');canvas.width=Math.round(image.naturalWidth*scale);canvas.height=Math.round(image.naturalHeight*scale);
+    const context=canvas.getContext('2d');if(!context)throw Error('Canvas is unavailable in this browser.');
+    context.drawImage(image,0,0,canvas.width,canvas.height);
     worker=await Tesseract.createWorker('eng');
     const result=await worker.recognize(canvas,{}, {tsv:true});
-    const {activities,warning}=parseScreenshotTsv(result.data.tsv||'',week,canvas.width);
+    const {activities,warning}=parseScreenshotTsv(result.data.tsv||'',week,image.naturalWidth,gridImage,canvas.width/image.naturalWidth);
     if(localDate(state.planWeekStart)!==week)return;
     let added=0;
     for(const item of activities){if(state.planDraft.some(e=>e.date===item.date&&e.start===item.start&&e.title.toLowerCase()===item.title.toLowerCase()))continue;state.planDraft.push({id:id(),kind:'activity',...item});added++;}
@@ -200,7 +214,7 @@ function inboxView(){const all=activeEntries().filter(e=>e.kind==='task');const 
 
 function configured(){const c=window.STAR_FIREBASE;return !!(c?.apiKey&&c?.projectId&&!c.apiKey.includes('YOUR_')&&!c.projectId.includes('YOUR_'));}
 function reminderCard(){const supported='Notification' in window;const enabled=localStorage.getItem('star-reminder-enabled')==='yes';const time=localStorage.getItem('star-reminder-time')||'19:00';return `<section class="card card-pad"><div class="card-header"><div><h2>Daily review reminder</h2><p>A small nudge to check tomorrow and your Inbox</p></div></div>${supported?`<div class="form-stack"><label class="field">Reminder time<input id="reminder-time" type="time" value="${time}"></label><div class="settings-actions"><button class="${enabled?'secondary-button':'primary-button'}" data-action="${enabled?'disable-reminder':'enable-reminder'}">${enabled?'Turn off reminder':'Enable reminder'}</button></div><p class="muted" style="font-size:12px;margin:0">Works while this app is open. Browser notification permission is required.</p></div>`:'<div class="status warn">This browser does not support notifications.</div>'}</section>`;}
-function settingsView(){return `${hero('MAKE IT YOURS','Settings.','Your data stays available on this device. Connect sync whenever you’re ready.')}<div class="settings-grid"><section class="card card-pad"><div class="card-header"><div><h2>Data & backup</h2><p>Keep a copy you control</p></div></div><div class="form-stack"><p class="muted" style="font-size:13px">${activeEntries().length} items stored in this browser. Export includes events, activities, templates, tasks, and notes.</p><div class="settings-actions"><button class="secondary-button" data-action="export">↓ Export JSON</button><label class="secondary-button" style="cursor:pointer">↑ Import JSON<input id="import-file" type="file" accept="application/json,.json" hidden></label></div><div class="status warn">Import merges by item ID. Keep your export file somewhere safe.</div></div></section><section class="card card-pad"><div class="card-header"><div><h2>Cross-device sync</h2><p>Personal Firebase project</p></div></div>${!configured()?`<div class="status warn">Sync is not configured. Fill <code>.env.local</code>, run <code>node scripts/generate-config.mjs</code>, then reload.</div><p class="muted" style="font-size:12px;margin:13px 0 0">The setup steps and security rules are in README.md.</p>`:state.auth?`<div class="form-stack"><div class="status">Signed in as ${esc(state.auth.email)}. ${esc(syncLabel())}</div><div class="settings-actions"><button class="primary-button" data-action="sync">↻ Sync now</button><button class="secondary-button" data-action="sign-out">Sign out</button></div></div>`:`<form id="auth-form" class="form-stack"><label class="field">Email<input type="email" name="email" required autocomplete="email"></label><label class="field">Password<input type="password" name="password" required minlength="6" autocomplete="current-password"></label><div class="settings-actions"><button class="primary-button" name="mode" value="login">Sign in</button><button class="secondary-button" name="mode" value="signup">Create account</button></div></form>`}${state.syncStatus&&state.syncStatus.startsWith('Error')?`<div class="status error" style="margin-top:12px">${esc(state.syncStatus)}</div>`:''}</section><section class="card card-pad"><div class="card-header"><div><h2>How this works</h2></div></div><p class="muted" style="font-size:13px">Important events appear on Calendar and in Week. Activities fill the hourly Week schedule; reusable templates help you plan. Tasks can have a deadline or stay undated in the Inbox. Your changes save instantly, including when offline.</p><button class="text-button" data-action="install">Install app on this device →</button></section></div>`;}
+function settingsView(){return `${hero('MAKE IT YOURS','Settings.','Your data stays available on this device. Connect sync whenever you’re ready.')}<div class="settings-grid"><section class="card card-pad"><div class="card-header"><div><h2>Data & backup</h2><p>Keep a copy you control</p></div></div><div class="form-stack"><p class="muted" style="font-size:13px">${activeEntries().length} items stored in this browser. Export includes events, activities, templates, tasks, and notes.</p><div class="settings-actions"><button class="secondary-button" data-action="export">↓ Export JSON</button><label class="secondary-button" style="cursor:pointer">↑ Import JSON<input id="import-file" type="file" accept="application/json,.json" hidden></label></div><div class="status warn">Import merges by item ID. Keep your export file somewhere safe.</div></div></section><section class="card card-pad"><div class="card-header"><div><h2>Cross-device sync</h2><p>Personal Firebase project</p></div></div>${!configured()?`<div class="status warn">Sync is not configured. Fill <code>.env.local</code>, run <code>node scripts/generate-config.mjs</code>, then reload.</div><p class="muted" style="font-size:12px;margin:13px 0 0">The setup steps and security rules are in README.md.</p>`:state.auth?`<div class="form-stack"><div class="status">Signed in as ${esc(state.auth.email)}. ${esc(syncLabel())}</div><div class="settings-actions"><button class="primary-button" data-action="sync">↻ Sync now</button><button class="secondary-button" data-action="sign-out">Sign out</button></div></div>`:`<form id="auth-form" class="form-stack"><label class="field">Email<input type="email" name="email" required autocomplete="email"></label><label class="field">Password<input type="password" name="password" required minlength="6" autocomplete="current-password"></label><div class="settings-actions"><button class="primary-button" name="mode" value="login">Sign in</button><button class="secondary-button" name="mode" value="signup">Create account</button></div></form>`}${state.syncStatus&&state.syncStatus.startsWith('Error')?`<div class="status error" style="margin-top:12px">${esc(state.syncStatus)}</div>`:''}</section><section class="card card-pad"><div class="card-header"><div><h2>How this works</h2></div></div><p class="muted" style="font-size:13px">Important events appear on Calendar and in Week. Activities fill the hourly Week schedule; reusable templates help you plan. Tasks can have a deadline or stay undated in the Inbox. Your changes save instantly, including when offline.</p><button class="text-button" data-action="install">Install app on this device →</button><p class="muted" style="font-size:11px;margin:12px 0 0">Version ${APP_VERSION}</p></section></div>`;}
 
 function renderModal(){
   const e=state.modal.entry||{}, kind=state.modal.kind||e.kind||'event', weekdays=e.weekdays||[];

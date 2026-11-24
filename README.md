@@ -1,6 +1,6 @@
 # Star Intersection
 
-> **Star Intersection (called Star)** is a local-first personal planning app for shaping an hourly week while keeping important calendar events, deadlines, and “do later” thoughts close at hand. It is designed for personal use across a MacBook, Windows laptop, and Android phone. **Current version: 0.2.0 (installable web prototype).**
+> **Star Intersection (called Star)** is a local-first personal planning app for shaping an hourly week while keeping important calendar events, deadlines, and “do later” thoughts close at hand. It is designed for personal use across a MacBook, Windows laptop, and Android phone. **Current version: 0.2.1 (installable web prototype).**
 
 ## Project status
 
@@ -21,7 +21,7 @@ The planner works locally and keeps data in this browser. A Firebase sync path i
 
 Press `/` to focus quick capture or open the task editor. In **Week**, choose **Plan shown week** or **Plan upcoming week**. Add activities in the draft, select **Add template** to copy regular chores, or edit the reusable template itself. Important calendar events appear in the draft automatically and remain separate from ordinary activities. Save the week when the blocks look right.
 
-**Import screenshot** suggests activities from a table image with weekday headers and hourly labels. The image is processed in the browser; OCR code and language data download on first use. The parser currently reads English and Indonesian day names. It estimates one-hour blocks from detected rows, so merged cells, small text, and OCR mistakes require review. Edit or remove suggestions before saving. Nothing from the screenshot is added to Calendar automatically.
+**Import screenshot** suggests activities from a table image with weekday headers and hourly labels. The image is processed in the browser; OCR code and language data download on first use. The parser currently reads English and Indonesian day names. When the hour grid is clear, it uses cell borders to recover merged block durations; otherwise it suggests one-hour blocks. Small text and OCR mistakes still require review. Edit or remove suggestions before saving. Nothing from the screenshot is added to Calendar automatically.
 
 ## Run locally
 
@@ -82,5 +82,6 @@ For Firebase Hosting, install the official Firebase CLI, then run `firebase logi
 
 ## Change log
 
+- **0.2.1 — 2026-11-24:** Fix screenshot decoding for PNGs and detect table borders to recover merged activity durations.
 - **0.2.0 — 2026-11-24:** Separate important events from weekly activities; add draft-based week planning, reusable templates, screenshot OCR suggestions, and a more helpful yellow Orbit.
 - **0.1.0 — 2026-11-24:** First local-first planner, light observatory interface, Orbit mascot, optional Firebase sync path, and allowlisted build.
