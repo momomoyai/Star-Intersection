@@ -227,19 +227,19 @@ a{color:inherit}
 
 .mascot-dock{position:fixed;z-index:8;right:25px;bottom:26px;display:grid;justify-items:end;gap:12px;pointer-events:none}
 .mascot-dock>*{pointer-events:auto}
-.mascot-trigger{position:relative;display:grid;place-items:center;width:76px;height:76px;border:1px solid #b8c7ed;border-radius:24px;background:#fff;box-shadow:0 10px 24px #4051a638,4px 4px 0 #d5def6;color:var(--ink);transition:transform .2s,box-shadow .2s}
-.mascot-trigger:hover,.mascot-trigger[aria-expanded="true"]{transform:translateY(-5px) rotate(-5deg);box-shadow:0 16px 28px #4051a64a,4px 4px 0 #c2cff5}
+.mascot-trigger{position:relative;display:grid;place-items:center;width:76px;height:76px;border:1px solid #e4c76b;border-radius:24px;background:#fffaf0;box-shadow:0 10px 24px #997d2138,4px 4px 0 #f6e8ad;color:var(--ink);transition:transform .2s,box-shadow .2s}
+.mascot-trigger:hover,.mascot-trigger[aria-expanded="true"]{transform:translateY(-5px) rotate(-5deg);box-shadow:0 16px 28px #a98b344a,4px 4px 0 #f1dc8d}
 .mascot-trigger svg{position:relative;z-index:2;width:62px;height:62px;overflow:visible;filter:drop-shadow(0 3px 3px #5262a52a);animation:mascot-float 3.6s ease-in-out infinite}
-.mascot-ring{position:absolute;inset:7px;border:2px solid #9fb9e8;border-radius:50%;transform:rotate(-20deg) scaleX(1.25);opacity:.7}
-.mascot-body{fill:#e3eaff;stroke:#6e80cd;stroke-width:3.2;stroke-linejoin:round}
-.mood-alert .mascot-body{fill:#ffe5ee;stroke:#bd6798}
-.mood-ready .mascot-body{fill:#d9f3f5;stroke:#4b9da8}
-.mood-calm .mascot-body{fill:#fff1bd;stroke:#bea960}
+.mascot-ring{position:absolute;inset:7px;border:2px solid #e5ba4c;border-radius:50%;transform:rotate(-20deg) scaleX(1.25);opacity:.7}
+.mascot-body{fill:#ffdc4e;stroke:#a86e12;stroke-width:3.2;stroke-linejoin:round}
+.mood-alert .mascot-body{fill:#ffcf49;stroke:#b5651d}
+.mood-ready .mascot-body{fill:#ffe05b;stroke:#ab7615}
+.mood-calm .mascot-body{fill:#ffe878;stroke:#ae8b2c}
 .mascot-eye{fill:#26386f;transform:translate(var(--look-x,0),var(--look-y,0));transition:transform .1s}
-.mascot-cheek{fill:#f6a9b8;opacity:.75}
+.mascot-cheek{fill:#ef8f64;opacity:.85}
 .mascot-mouth{fill:none;stroke:#26386f;stroke-width:3;stroke-linecap:round}
-.mascot-spark{position:absolute;z-index:3;right:3px;top:2px;color:#7788d8;font-size:18px;animation:mascot-twinkle 2s ease-in-out infinite}
-.mascot-label{position:absolute;z-index:4;bottom:-10px;border:1px solid #b9c7eb;border-radius:100px;background:#fff;color:#42539f;padding:3px 8px;font:800 10px 'Space Grotesk',sans-serif;letter-spacing:.03em}
+.mascot-spark{position:absolute;z-index:3;right:3px;top:2px;color:#efbd35;font-size:18px;animation:mascot-twinkle 2s ease-in-out infinite}
+.mascot-label{position:absolute;z-index:4;bottom:-10px;border:1px solid #e8d188;border-radius:100px;background:#fffdf3;color:#735418;padding:3px 8px;font:800 10px 'Space Grotesk',sans-serif;letter-spacing:.03em}
 .mascot-panel{width:min(310px,calc(100vw - 30px));border:1px solid #c2ccef;border-radius:18px 18px 18px 36px;background:#fff;box-shadow:0 17px 45px #4252a52e,5px 5px 0 #dce4f9;padding:18px 18px 17px;color:var(--ink);animation:mascot-pop .2s ease-out}
 .mascot-panel-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
 .mascot-kicker{color:var(--royal);font:800 10px 'Space Grotesk',sans-serif;letter-spacing:.16em}
