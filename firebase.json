@@ -5,9 +5,17 @@
       "firebase.json",
       "firestore.rules",
       "README.md",
-      "config.example.js",
+      ".env*",
+      "scripts/**",
+      "node_modules/**",
+      ".firebase/**",
+      "*.pem",
+      "*.key",
+      "*service-account*.json",
+      "*credentials*.json",
       ".git/**",
-      ".gitignore"
+      ".gitignore",
+      ".DS_Store"
     ],
     "headers": [
       { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
