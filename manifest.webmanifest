@@ -1,0 +1,10 @@
+{
+  "name": "Star Intersection",
+  "short_name": "Star",
+  "description": "Your week, your year, and the things you want to remember.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f8ff",
+  "theme_color": "#e8edff",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
