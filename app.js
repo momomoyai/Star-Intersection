@@ -1,6 +1,8 @@
 import { parseScreenshotTsv } from './screenshot-import.js';
 
-const APP_VERSION = '0.3.0';
+const APP_VERSION = '0.4.0';
+const NATIVE = Boolean(window.__TAURI__);
+const ANDROID = NATIVE && /Android/i.test(navigator.userAgent);
 const STORAGE = 'star-intersection-data-v1';
 const AUTH_STORAGE = 'star-intersection-auth-v1';
 const OWNER_STORAGE = 'star-intersection-sync-owner-v1';
@@ -27,7 +29,7 @@ const state = {
   auth: JSON.parse(localStorage.getItem(AUTH_STORAGE) || 'null'), syncing: false,
   mascotOpen: false, planWeekStart: startOfWeek(addDays(new Date(),7)), planDraft: null,
   planOriginalIds: [], planEditing: null, planAddDate:'', planTab:'week', templateEditing:null, planDirty:false,
-  importStatus:''
+  importStatus:'', compact:false, autostartEnabled:false
 };
 
 function localDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
@@ -56,15 +58,27 @@ function mobileButton(view) { return `<button class="${state.view===view?'active
 
 function render() {
   const today=localDate(new Date());
+  if(state.compact){app.innerHTML=quickView(today);return;}
   app.innerHTML=`<div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">✳</span> Star Intersection</div><nav class="sidebar-nav">${['today','week','calendar','inbox','settings'].map(navButton).join('')}</nav><div class="sidebar-bottom"><div class="side-card"><strong>Everything in its place.</strong><p>Capture a thought now. Give it a date when you're ready.</p><button data-action="new-task">+ Add to Inbox</button></div><div class="side-meta">${syncLabel()}<br>Saved on this device</div></div></aside><main class="main"><header class="topbar"><div class="crumb">YOUR SPACE / ${titleForView()}</div><div class="top-actions"><span class="date-chip">${prettyDate(new Date(),{weekday:'short',month:'short',day:'numeric',year:'numeric'})}</span><button class="secondary-button" data-view="settings" title="Settings">⚙</button><button class="primary-button" data-action="new-event">+ New event</button></div></header>${viewContent(today)}</main><nav class="mobile-nav">${['today','week','calendar','inbox','settings'].map(mobileButton).join('')}</nav></div>${state.modal?renderModal():''}`;
   app.insertAdjacentHTML('beforeend',mascotMarkup());
-  if(state.view==='settings')document.querySelector('.settings-grid').insertAdjacentHTML('beforeend',reminderCard());
+  if(state.view==='settings'){
+    document.querySelector('.settings-grid').insertAdjacentHTML('beforeend',reminderCard());
+    if(NATIVE&&!ANDROID)document.querySelector('.settings-grid').insertAdjacentHTML('beforeend',nativeStartupCard());
+    if(NATIVE)document.querySelector('[data-action="install"]')?.remove();
+  }
   if(state.view==='week'){
     document.querySelector('.week-toolbar .toolbar-left').insertAdjacentHTML('beforeend','<button class="pill-button" data-action="jump-now">◉ Now</button>');
     const index=Array.from({length:7},(_,i)=>localDate(addDays(state.weekStart,i))).indexOf(today);
     if(index>=0){const line=document.createElement('div');line.className='week-now-line';line.style.top=`${(new Date().getHours()+new Date().getMinutes()/60)*56}px`;document.querySelectorAll('.week-day-column')[index].appendChild(line);}
   }
 }
+function quickView(today){
+  const now=new Date(),minute=now.getHours()*60+now.getMinutes();
+  const upcoming=scheduleOn(today).filter(item=>{const [h,m]=(item.end||item.start||'23:59').split(':').map(Number);return h*60+m>minute;}).slice(0,3);
+  const due=activeEntries().filter(item=>item.kind==='task'&&!item.done&&item.dueDate&&item.dueDate<=today).length;
+  return `<main class="quick-shell"><header class="quick-header"><span class="brand-mark">✳</span><div><small>STAR INTERSECTION</small><h1>Today</h1></div><button class="icon-button" data-action="native-hide" aria-label="Hide to tray">×</button></header><p class="quick-date">${prettyDate(now,{weekday:'long',month:'long',day:'numeric'})}</p><section class="quick-card"><div class="quick-label">UP NEXT</div>${upcoming.length?upcoming.map(item=>`<div class="quick-item"><span>${shortTime(item.start)}</span><strong>${esc(item.title)}</strong></div>`).join(''):'<p>Your remaining hours are open.</p>'}</section><section class="quick-card"><div class="quick-label">CAPTURE A THOUGHT</div><form class="quick-form" id="quick-form"><input name="title" placeholder="Something to remember…" required autocomplete="off" maxlength="120"><button aria-label="Add to Inbox">+</button></form><p>${due?`${due} ${due===1?'task needs':'tasks need'} attention today.`:'Your Inbox is ready when you are.'}</p></section><button class="primary-button quick-open" data-action="native-full">Open full planner →</button><div class="quick-sync">${esc(syncLabel())}</div></main>`;
+}
+function nativeStartupCard(){return `<section class="card card-pad"><div class="card-header"><div><h2>Desktop app</h2><p>Keep Star one click away</p></div></div><div class="form-stack"><label class="native-setting"><input id="launch-at-login" type="checkbox" ${state.autostartEnabled?'checked':''}><span>Launch at login in the tray</span></label><p class="muted" style="font-size:12px;margin:0">Closing the window hides it. Use the tray menu's Quit action to stop Star.</p></div></section>`;}
 function syncLabel(){if(!configured())return 'Local mode';if(!state.auth)return 'Sync ready · sign in';return state.syncing?'Syncing…':state.syncStatus||'Sync on';}
 function viewContent(today){switch(state.view){case 'today':return todayView(today);case 'week':return weekView(today);case 'planner':return plannerView();case 'calendar':return calendarView(today);case 'inbox':return inboxView();case 'settings':return settingsView();}}
 function hero(kicker,title,subtitle,actions=''){
@@ -162,7 +176,7 @@ function loadScreenshotImage(file){
 }
 function loadTesseract(){
   if(window.Tesseract)return Promise.resolve(window.Tesseract);
-  if(!tesseractPromise)tesseractPromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';script.onload=()=>resolve(window.Tesseract);script.onerror=()=>reject(Error('OCR could not load. Connect to the internet and try again.'));document.head.appendChild(script);}).catch(err=>{tesseractPromise=null;throw err;});
+  if(!tesseractPromise)tesseractPromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=NATIVE?'/ocr/tesseract.min.js':'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';script.onload=()=>resolve(window.Tesseract);script.onerror=()=>reject(Error(NATIVE?'Bundled OCR could not load. Reinstall the app.':'OCR could not load. Connect to the internet and try again.'));document.head.appendChild(script);}).catch(err=>{tesseractPromise=null;throw err;});
   return tesseractPromise;
 }
 async function importScreenshot(file){
@@ -182,7 +196,7 @@ async function importScreenshot(file){
     const canvas=document.createElement('canvas');canvas.width=Math.round(image.naturalWidth*scale);canvas.height=Math.round(image.naturalHeight*scale);
     const context=canvas.getContext('2d');if(!context)throw Error('Canvas is unavailable in this browser.');
     context.drawImage(image,0,0,canvas.width,canvas.height);
-    worker=await Tesseract.createWorker('eng');
+    worker=await Tesseract.createWorker('eng',1,NATIVE?{workerPath:'/ocr/worker.min.js',corePath:'/ocr',langPath:'/ocr',workerBlobURL:false}:undefined);
     const result=await worker.recognize(canvas,{}, {tsv:true});
     const {activities,warning}=parseScreenshotTsv(result.data.tsv||'',week,image.naturalWidth,gridImage,canvas.width/image.naturalWidth);
     if(localDate(state.planWeekStart)!==week)return;
@@ -213,7 +227,7 @@ function miniMonth(month,today){const first=new Date(month.getFullYear(),month.g
 function inboxView(){const all=activeEntries().filter(e=>e.kind==='task');const visible=all.filter(e=>state.inboxFilter==='all'||(state.inboxFilter==='open'&&!e.done)||(state.inboxFilter==='done'&&e.done)||(state.inboxFilter==='undated'&&!e.dueDate&&!e.done)).sort((a,b)=>Number(a.done)-Number(b.done)||String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999'))||b.updatedAt-a.updatedAt);return `${hero('A HOME FOR EVERY THOUGHT','Your Inbox.','Write it down before it slips away. You can organize it later.',`<button class="secondary-button" data-action="new-task">+ Add a task</button>`)}<div class="inbox-layout"><section class="card card-pad"><div class="card-header"><div><h2>Tasks & notes</h2><p>${all.filter(e=>!e.done).length} open · ${all.filter(e=>e.done).length} completed</p></div></div><div class="filter-row">${['open','undated','done','all'].map(f=>`<button class="filter-chip ${state.inboxFilter===f?'active':''}" data-filter="${f}">${({open:'Open',undated:'Undated',done:'Done',all:'All'})[f]}</button>`).join('')}</div>${visible.length?`<div class="list">${visible.map(taskRow).join('')}</div>`:'<div class="empty">Nothing here yet. A clear mind starts with a quick note.</div>'}</section><section class="inbox-hero"><h2>Catch the small things.</h2><p>That idea, errand, question, or promise to yourself belongs here. A date is optional.</p><form class="quick-form" id="quick-form"><input name="title" placeholder="I'll do this later…" required autocomplete="off"><button aria-label="Add to Inbox">+</button></form></section></div>`;}
 
 function configured(){const c=window.STAR_FIREBASE;return !!(c?.apiKey&&c?.projectId&&!c.apiKey.includes('YOUR_')&&!c.projectId.includes('YOUR_'));}
-function reminderCard(){const supported='Notification' in window;const enabled=localStorage.getItem('star-reminder-enabled')==='yes';const time=localStorage.getItem('star-reminder-time')||'19:00';return `<section class="card card-pad"><div class="card-header"><div><h2>Daily review reminder</h2><p>A small nudge to check tomorrow and your Inbox</p></div></div>${supported?`<div class="form-stack"><label class="field">Reminder time<input id="reminder-time" type="time" value="${time}"></label><div class="settings-actions"><button class="${enabled?'secondary-button':'primary-button'}" data-action="${enabled?'disable-reminder':'enable-reminder'}">${enabled?'Turn off reminder':'Enable reminder'}</button></div><p class="muted" style="font-size:12px;margin:0">Works while this app is open. Browser notification permission is required.</p></div>`:'<div class="status warn">This browser does not support notifications.</div>'}</section>`;}
+function reminderCard(){const supported=NATIVE||'Notification' in window;const enabled=localStorage.getItem('star-reminder-enabled')==='yes';const time=localStorage.getItem('star-reminder-time')||'19:00';const help=NATIVE?(ANDROID?'Scheduled on this device, including when the app is closed. Android permission and battery settings may affect delivery.':'Works while Star is running, including when its window is hidden in the tray.'): 'Works while this app is open. Browser notification permission is required.';return `<section class="card card-pad"><div class="card-header"><div><h2>Daily review reminder</h2><p>A small nudge to check tomorrow and your Inbox</p></div></div>${supported?`<div class="form-stack"><label class="field">Reminder time<input id="reminder-time" type="time" value="${time}"></label><div class="settings-actions"><button class="${enabled?'secondary-button':'primary-button'}" data-action="${enabled?'disable-reminder':'enable-reminder'}">${enabled?'Turn off reminder':'Enable reminder'}</button></div><p class="muted" style="font-size:12px;margin:0">${help}</p></div>`:'<div class="status warn">This browser does not support notifications.</div>'}</section>`;}
 function settingsView(){return `${hero('MAKE IT YOURS','Settings.','Your data stays available on this device. Connect sync whenever you’re ready.')}<div class="settings-grid"><section class="card card-pad"><div class="card-header"><div><h2>Data & backup</h2><p>Keep a copy you control</p></div></div><div class="form-stack"><p class="muted" style="font-size:13px">${activeEntries().length} items stored in this browser. Export includes events, activities, templates, tasks, and notes.</p><div class="settings-actions"><button class="secondary-button" data-action="export">↓ Export JSON</button><label class="secondary-button" style="cursor:pointer">↑ Import JSON<input id="import-file" type="file" accept="application/json,.json" hidden></label></div><div class="status warn">Import merges by item ID. Keep your export file somewhere safe.</div></div></section><section class="card card-pad"><div class="card-header"><div><h2>Cross-device sync</h2><p>Personal Firebase project</p></div></div>${!configured()?`<div class="status warn">Sync is not configured. Fill <code>.env.local</code>, run <code>node scripts/generate-config.mjs</code>, then reload.</div><p class="muted" style="font-size:12px;margin:13px 0 0">The setup steps and security rules are in README.md.</p>`:state.auth?`<div class="form-stack"><div class="status">Signed in as ${esc(state.auth.email)}. ${esc(syncLabel())}</div><div class="settings-actions"><button class="primary-button" data-action="sync">↻ Sync now</button><button class="secondary-button" data-action="sign-out">Sign out</button></div></div>`:`<form id="auth-form" class="form-stack"><label class="field">Email<input type="email" name="email" required autocomplete="email"></label><label class="field">Password<input type="password" name="password" required minlength="6" autocomplete="current-password"></label><div class="settings-actions"><button class="primary-button" name="mode" value="login">Sign in</button><button class="secondary-button" name="mode" value="signup">Create account</button></div></form>`}${state.syncStatus&&state.syncStatus.startsWith('Error')?`<div class="status error" style="margin-top:12px">${esc(state.syncStatus)}</div>`:''}</section><section class="card card-pad"><div class="card-header"><div><h2>How this works</h2></div></div><p class="muted" style="font-size:13px">Important events appear on Calendar and in Week. Activities fill the hourly Week schedule; reusable templates help you plan. Tasks can have a deadline or stay undated in the Inbox. Your changes save instantly, including when offline.</p><button class="text-button" data-action="install">Install app on this device →</button><p class="muted" style="font-size:11px;margin:12px 0 0">Version ${APP_VERSION}</p></section></div>`;}
 
 function renderModal(){
@@ -265,7 +279,9 @@ document.addEventListener('click',e=>{
   if(action==='sync')sync();
   if(action==='sign-out'){localStorage.removeItem(AUTH_STORAGE);state.auth=null;state.syncStatus='';render();}
   if(action==='enable-reminder')enableReminder();
-  if(action==='disable-reminder'){localStorage.setItem('star-reminder-enabled','no');render();toast('Reminder turned off');}
+  if(action==='disable-reminder'){localStorage.setItem('star-reminder-enabled','no');scheduleNativeReminder().catch(err=>toast(`Reminder update failed: ${err.message}`));render();toast('Reminder turned off');}
+  if(action==='native-full')window.__TAURI__?.core.invoke('show_full');
+  if(action==='native-hide')window.__TAURI__?.core.invoke('hide_window');
   if(action==='install'){if(installPrompt)installPrompt.prompt();else toast('Use your browser’s Install or Add to Home Screen menu.');}
 });
 document.addEventListener('submit',async e=>{
@@ -282,7 +298,11 @@ document.addEventListener('change',async e=>{
   if(e.target.dataset.toggle){const old=state.entries.find(x=>x.id===e.target.dataset.toggle);if(old)upsert({...old,done:e.target.checked});}
   if(e.target.id==='import-file'){const file=e.target.files?.[0];if(file)await importData(file);}
   if(e.target.id==='screenshot-file'){const file=e.target.files?.[0];if(file)await importScreenshot(file);}
-  if(e.target.id==='reminder-time')localStorage.setItem('star-reminder-time',e.target.value);
+  if(e.target.id==='reminder-time'){localStorage.setItem('star-reminder-time',e.target.value);scheduleNativeReminder().catch(err=>toast(`Reminder update failed: ${err.message}`));}
+  if(e.target.id==='launch-at-login'&&NATIVE&&!ANDROID){
+    try{const autostart=window.__TAURI__.autostart;if(e.target.checked)await autostart.enable();else await autostart.disable();state.autostartEnabled=await autostart.isEnabled();render();}
+    catch(err){e.target.checked=state.autostartEnabled;toast(`Launch setting failed: ${err.message}`);}
+  }
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&state.modal){state.modal=null;render();return;}
@@ -318,10 +338,38 @@ let syncTimer;function queueSync(){if(!configured()||!state.auth)return;clearTim
 window.addEventListener('online',sync);setInterval(sync,60000);
 window.addEventListener('focus',sync);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync();});
-async function enableReminder(){if(!('Notification' in window))return;const permission=await Notification.requestPermission();if(permission!=='granted'){toast('Notification permission was not granted');return;}localStorage.setItem('star-reminder-enabled','yes');render();toast('Daily reminder enabled');checkReminder();}
-function checkReminder(){if(localStorage.getItem('star-reminder-enabled')!=='yes'||!('Notification' in window)||Notification.permission!=='granted')return;const now=new Date(),today=localDate(now),time=localStorage.getItem('star-reminder-time')||'19:00';if(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`<time||localStorage.getItem('star-reminder-sent')===today)return;const tomorrow=localDate(addDays(now,1)),due=activeEntries().filter(e=>e.kind==='task'&&!e.done&&e.dueDate===tomorrow).length,inbox=activeEntries().filter(e=>e.kind==='task'&&!e.done&&!e.dueDate).length;const parts=[due?`${due} ${due===1?'task':'tasks'} due tomorrow`:null,inbox?`${inbox} ${inbox===1?'thought':'thoughts'} in your Inbox`:null].filter(Boolean);const note=new Notification('Take a moment to plan tomorrow',{body:parts.length?parts.join(' · '):'A quick review can make tomorrow feel lighter.',icon:'/icon.svg'});note.onclick=()=>{window.focus();state.view='today';render();};localStorage.setItem('star-reminder-sent',today);}
+async function scheduleNativeReminder(){
+  if(!NATIVE)return;
+  const enabled=localStorage.getItem('star-reminder-enabled')==='yes';
+  const [hour,minute]=(localStorage.getItem('star-reminder-time')||'19:00').split(':').map(Number);
+  if(ANDROID){
+    const notifications=window.__TAURI__.notification;
+    await notifications.cancelAll();
+    if(enabled&&await notifications.isPermissionGranted())await notifications.sendNotification({id:1900,title:'Review tomorrow with Star',body:'Check your week plan and Inbox before you finish today.',schedule:notifications.Schedule.interval({hour,minute},true)});
+  }else await window.__TAURI__.core.invoke('set_reminder',{enabled,hour,minute});
+}
+async function enableReminder(){
+  if(NATIVE){
+    try{const notifications=window.__TAURI__.notification;let granted=await notifications.isPermissionGranted();if(!granted)granted=(await notifications.requestPermission())==='granted';if(!granted){toast('Notification permission was not granted');return;}localStorage.setItem('star-reminder-enabled','yes');await scheduleNativeReminder();render();toast('Daily reminder enabled');}
+    catch(err){toast(`Reminder could not be enabled: ${err.message}`);}
+    return;
+  }
+  if(!('Notification' in window))return;
+  const permission=await Notification.requestPermission();if(permission!=='granted'){toast('Notification permission was not granted');return;}
+  localStorage.setItem('star-reminder-enabled','yes');render();toast('Daily reminder enabled');checkReminder();
+}
+function checkReminder(){if(NATIVE||localStorage.getItem('star-reminder-enabled')!=='yes'||!('Notification' in window)||Notification.permission!=='granted')return;const now=new Date(),today=localDate(now),time=localStorage.getItem('star-reminder-time')||'19:00';if(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`<time||localStorage.getItem('star-reminder-sent')===today)return;const tomorrow=localDate(addDays(now,1)),due=activeEntries().filter(e=>e.kind==='task'&&!e.done&&e.dueDate===tomorrow).length,inbox=activeEntries().filter(e=>e.kind==='task'&&!e.done&&!e.dueDate).length;const parts=[due?`${due} ${due===1?'task':'tasks'} due tomorrow`:null,inbox?`${inbox} ${inbox===1?'thought':'thoughts'} in your Inbox`:null].filter(Boolean);const note=new Notification('Take a moment to plan tomorrow',{body:parts.length?parts.join(' · '):'A quick review can make tomorrow feel lighter.',icon:'/icon.svg'});note.onclick=()=>{window.focus();state.view='today';render();};localStorage.setItem('star-reminder-sent',today);}
 setInterval(checkReminder,60000);checkReminder();
 setInterval(()=>{if(!state.modal&&!state.mascotOpen){const dock=document.querySelector('.mascot-dock');if(dock)dock.outerHTML=mascotMarkup();}},60000);
 let installPrompt=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;});
-if('serviceWorker' in navigator && location.protocol!=='file:')navigator.serviceWorker.register('/sw.js').catch(()=>{});
+if(!NATIVE&&'serviceWorker' in navigator && location.protocol!=='file:')navigator.serviceWorker.register('/sw.js').catch(()=>{});
+if(NATIVE&&!ANDROID){
+  window.starNative={
+    quick(){state.compact=true;state.view='today';state.modal=null;render();},
+    capture(){this.quick();document.querySelector('#quick-form input')?.focus();},
+    full(){state.compact=false;render();}
+  };
+  window.__TAURI__.autostart?.isEnabled?.().then(enabled=>{state.autostartEnabled=enabled;if(state.view==='settings')render();}).catch(()=>{});
+}
+if(NATIVE)scheduleNativeReminder().catch(err=>{state.syncStatus=`Error: Reminder setup failed: ${err.message}`;render();});
 render();if(configured()&&state.auth)sync();
