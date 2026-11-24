@@ -1,6 +1,6 @@
 import { parseScreenshotTsv } from './screenshot-import.js';
 
-const APP_VERSION = '0.2.1';
+const APP_VERSION = '0.3.0';
 const STORAGE = 'star-intersection-data-v1';
 const AUTH_STORAGE = 'star-intersection-auth-v1';
 const OWNER_STORAGE = 'star-intersection-sync-owner-v1';

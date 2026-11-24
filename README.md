@@ -1,10 +1,10 @@
 # Star Intersection
 
-> **Star Intersection (called Star)** is a local-first personal planning app for shaping an hourly week while keeping important calendar events, deadlines, and “do later” thoughts close at hand. It is designed for personal use across a MacBook, Windows laptop, and Android phone. **Current version: 0.2.1 (installable web prototype).**
+> **Star Intersection (called Star)** is a local-first personal planning app for shaping an hourly week while keeping important calendar events, deadlines, and “do later” thoughts close at hand. It is designed for personal use across a MacBook, Windows laptop, and Android phone. **Current version: 0.3.0 (installable web prototype).**
 
 ## Project status
 
-The planner works locally and keeps data in this browser. A Firebase sync path is implemented but requires a personal Firebase project and deployment before it can be used across devices. The current app is a PWA; a native tray app and reminders while fully closed are future work.
+The planner is live at [star-intersection-momomoyai.web.app](https://star-intersection-momomoyai.web.app). It saves immediately in this browser and syncs signed-in plans through the project's Firebase database. The current app is a PWA; a native tray app and reminders while fully closed are future work.
 
 ## What works
 
@@ -39,15 +39,15 @@ The app shell becomes available offline after the first successful visit. Manual
 
 Run the focused planner and screenshot parser checks with `node --test tests/*.test.mjs`.
 
-## Enable cross-device sync
+## Use across devices
 
-1. Create a [Firebase project](https://firebase.google.com/docs/projects/billing/firebase-pricing-plans) and a Cloud Firestore database. Review the current Spark plan limits before relying on it.
-2. Enable [Email/Password Authentication](https://firebase.google.com/docs/auth/web/password-auth).
-3. Publish the contents of [firestore.rules](firestore.rules) in Firestore Rules. The rule limits each signed-in user to their own `users/{uid}/items` documents.
-4. Copy [`.env.example`](.env.example) to `.env.local`. Fill in the Firebase Web app API key and project ID. Run `node scripts/build.mjs`.
-5. Serve or deploy `dist/` over HTTPS. Sign in to Star with the same account on each device.
+1. Open [Star Intersection](https://star-intersection-momomoyai.web.app) on the first device. In **Settings → Cross-device sync**, choose **Create account** with an email and password.
+2. On the MacBook, Windows laptop, and Android phone, open that same URL and sign in with the same account. The site can be installed from the browser's app menu on supported devices.
+3. Keep a JSON export from **Settings** as a separate backup. Sync occurs after edits, when the app regains focus or connectivity, and periodically while it is open; open the app to catch up after a device has been offline.
 
-For Firebase Hosting, install the official Firebase CLI, then run `firebase login`, `firebase use --add`, `node scripts/build.mjs`, and `firebase deploy --only hosting,firestore:rules` from the repository root. [firebase.json](firebase.json) serves only `dist/`.
+The Firebase project `star-intersection-momomoyai` has Email/Password Authentication, a Firestore database in Jakarta, and [firestore.rules](firestore.rules) deployed. Rules limit each account to its own `users/{uid}/items` documents. A temporary account passed a live sign-up, write, read, and anonymous-access check on 2026-11-24; it and its test document were deleted.
+
+For a new local build, copy [`.env.example`](.env.example) to `.env.local`, fill in the project's Firebase Web app API key and project ID, and run `node scripts/build.mjs`. The local `.env.local` already used for this deployment is ignored by Git. To redeploy, use the official Firebase CLI: `firebase login`, `node scripts/build.mjs`, then `firebase deploy --only hosting,firestore:rules,auth` from the repository root. [firebase.json](firebase.json) serves only `dist/`.
 
 **Configuration safety:** `.env.local`, generated `config.js`, and `dist/` are ignored by Git. The build copies only eight allowlisted browser files. The Firebase Web API key is a public browser identifier and appears in the deployed `config.js`; Firestore rules and Authentication protect private plans. Never put a password, service-account key, or other private credential in the env file. The browser stores a Firebase refresh token locally to resume sign-in, so use a private browser profile on shared computers.
 
@@ -57,7 +57,7 @@ For Firebase Hosting, install the official Firebase CLI, then run `firebase logi
 - Activities fill the hourly Week and Today schedule. Dated activities can be assembled in the week planner; legacy repeating activities continue to appear in Week.
 - Templates hold regular activities. Applying a template copies its blocks into the current draft. Editing a template does not rewrite saved weeks.
 - Tasks may have a due date or remain undated in the Inbox.
-- Edits save locally immediately. Sync runs after sign-in, after edits, when the device comes online, and while the app remains open.
+- Edits save locally immediately. Sync runs after sign-in, after edits, when the app comes online or regains focus, and while it remains open.
 - Each item is one Firestore document. If two offline devices edit the same item, the later device timestamp wins. Export backups before relying on the app for critical deadlines.
 - Deletions use small tombstone records so they can sync to other devices.
 
@@ -70,11 +70,11 @@ For Firebase Hosting, install the official Firebase CLI, then run `firebase logi
 | [index.html](index.html), [manifest.webmanifest](manifest.webmanifest), [sw.js](sw.js) | App shell, installation, offline cache |
 | [scripts/generate-config.mjs](scripts/generate-config.mjs) | Read ignored env settings and generate local browser config |
 | [scripts/build.mjs](scripts/build.mjs) | Copy only approved browser assets into `dist/` |
-| [firebase.json](firebase.json), [firestore.rules](firestore.rules) | Hosting and per-user data rules |
+| [.firebaserc](.firebaserc), [firebase.json](firebase.json), [firestore.rules](firestore.rules) | Firebase project, hosting, authentication, and per-user data rules |
 
 ## Next milestones
 
-- Configure Firebase and test edits made offline on two real devices.
+- Test offline edits and sync on two real devices signed into the same account.
 - Improve screenshot OCR for merged cells and add a direct Google Sheets import option.
 - Prototype a low-memory desktop tray wrapper and measure RAM use.
 - Add reminders that work when the desktop app is closed, plus Android notification support.
@@ -82,6 +82,7 @@ For Firebase Hosting, install the official Firebase CLI, then run `firebase logi
 
 ## Change log
 
+- **0.3.0 — 2026-11-24:** Connect the live Firebase project, deploy private cross-device sync, refresh plans when the app regains focus, and publish the installable site.
 - **0.2.1 — 2026-11-24:** Fix screenshot decoding for PNGs and detect table borders to recover merged activity durations.
 - **0.2.0 — 2026-11-24:** Separate important events from weekly activities; add draft-based week planning, reusable templates, screenshot OCR suggestions, and a more helpful yellow Orbit.
 - **0.1.0 — 2026-11-24:** First local-first planner, light observatory interface, Orbit mascot, optional Firebase sync path, and allowlisted build.

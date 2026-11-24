@@ -1,4 +1,4 @@
-const CACHE = 'star-intersection-v4';
+const CACHE = 'star-intersection-v5';
 const FILES = ['/', '/index.html', '/styles.css', '/app.js', '/screenshot-import.js', '/config.js', '/manifest.webmanifest', '/icon.svg'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
