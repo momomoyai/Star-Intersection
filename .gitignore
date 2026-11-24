@@ -5,12 +5,20 @@
 /config.js
 *.pem
 *.key
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
 *service-account*.json
 *credentials*.json
 
 # Local build and tooling output
 node_modules/
+.tooling/
+src-tauri/target/
+src-tauri/gen/schemas/
 .firebase/
 dist/
+artifacts/
 .DS_Store
 *.log

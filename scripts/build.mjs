@@ -1,5 +1,5 @@
 import './generate-config.mjs';
-import { copyFileSync, lstatSync, mkdirSync, readdirSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,6 +17,7 @@ const files = [
 ];
 
 mkdirSync(output, { recursive: true });
+if (existsSync(resolve(output, 'ocr'))) rmSync(resolve(output, 'ocr'), { recursive: true });
 const unexpected = readdirSync(output).filter(name => !files.includes(name));
 if (unexpected.length) {
   throw new Error(`Unexpected files in dist/: ${unexpected.join(', ')}. Remove them before building.`);
