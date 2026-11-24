@@ -8,6 +8,7 @@ const output = resolve(root, 'dist');
 const files = [
   'index.html',
   'app.js',
+  'screenshot-import.js',
   'styles.css',
   'icon.svg',
   'manifest.webmanifest',
