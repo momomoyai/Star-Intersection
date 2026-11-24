@@ -9,7 +9,8 @@ The interface uses a light observatory theme with blue, teal, violet, and soft y
 From this folder:
 
 ```sh
-node scripts/generate-config.mjs
+node scripts/build.mjs
+cd dist
 python3 -m http.server 4173
 ```
 
@@ -24,10 +25,10 @@ The local app works without an account. To sync across Mac, Windows, and Android
 1. Create a Firebase project on the **Spark** plan and create a Cloud Firestore database. [Firebase says Spark does not require payment information and includes no-cost quotas](https://firebase.google.com/docs/projects/billing/firebase-pricing-plans). Keep the project on Spark if you want to avoid charges.
 2. Enable **Authentication → Sign-in method → Email/Password** in the Firebase console. [Firebase's setup guide](https://firebase.google.com/docs/auth/web/password-auth).
 3. In **Firestore → Rules**, replace the rules with the contents of `firestore.rules` and publish them. The rule only lets a signed-in user access `users/{their-uid}/items`. [Firebase's rules guide](https://firebase.google.com/docs/firestore/security/rules-conditions).
-4. Register a Web app in Firebase. Put its **Web API key** and **Project ID** into the ignored `.env.local` file, using `.env.example` as the template. Run `node scripts/generate-config.mjs` to create the ignored browser `config.js`, then reload. The web API key identifies the Firebase project; the Firestore rules enforce access to private data.
-5. Serve or host this same folder over HTTPS on each device. Firebase Hosting can use `firebase.json` in this repo. Sign in with the **same email and password** on every device. The app syncs on sign-in, when online, after edits, and every minute while open.
+4. Register a Web app in Firebase. Put its **Web API key** and **Project ID** into the ignored `.env.local` file, using `.env.example` as the template. Run `node scripts/build.mjs` to create the browser `config.js` and the allowlisted `dist/` folder. The web API key identifies the Firebase project; the Firestore rules enforce access to private data.
+5. Host `dist/` over HTTPS. Firebase Hosting is configured to serve `dist/`. Sign in with the **same email and password** on every device. The app syncs on sign-in, when online, after edits, and every minute while open.
 
-For Firebase Hosting, install the official Firebase CLI, then run `firebase login`, `firebase use --add`, and `firebase deploy --only hosting,firestore:rules` from this folder. The app needs your project ID and your Firebase account before this deployment can be completed.
+For Firebase Hosting, install the official Firebase CLI, then run `firebase login`, `firebase use --add`, `node scripts/build.mjs`, and `firebase deploy --only hosting,firestore:rules` from this folder. The app needs your project ID and your Firebase account before this deployment can be completed.
 
 Sync keeps one Firestore document per item. If the same item is edited offline on two devices, the later device timestamp wins. Export backups regularly if your plans are important. Deleted items remain as small sync tombstones. Each browser profile is bound to its first sync account to prevent uploading one account's local plans into another account.
 
