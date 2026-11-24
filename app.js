@@ -22,7 +22,9 @@ const state = {
   weekStart: startOfWeek(new Date()), monthDate: firstOfMonth(new Date()),
   calendarMode: 'month', inboxFilter: 'open', modal: null, syncStatus: '',
   auth: JSON.parse(localStorage.getItem(AUTH_STORAGE) || 'null'), syncing: false,
-  mascotOpen: false
+  mascotOpen: false, planWeekStart: startOfWeek(addDays(new Date(),7)), planDraft: null,
+  planOriginalIds: [], planEditing: null, planAddDate:'', planTab:'week', templateEditing:null, planDirty:false,
+  importStatus:''
 };
 
 function localDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
@@ -45,7 +47,7 @@ function save() { localStorage.setItem(STORAGE,JSON.stringify(state.entries)); r
 function upsert(entry) { const at=state.entries.findIndex(e=>e.id===entry.id); const next={...entry,updatedAt:Date.now(),dirty:true}; if(at<0) state.entries.push(next); else state.entries[at]=next; save(); queueSync(); }
 function removeEntry(entry) { if(!confirm(`Delete “${entry.title}”?`)) return; upsert({...entry,deleted:true}); toast('Deleted'); }
 function toast(message) { document.querySelector('.toast')?.remove(); const el=document.createElement('div'); el.className='toast'; el.textContent=message; document.body.appendChild(el); setTimeout(()=>el.remove(),3000); }
-function titleForView() { return ({today:'Today',week:'Week',calendar:'Calendar',inbox:'Inbox',settings:'Settings'})[state.view]; }
+function titleForView() { return ({today:'Today',week:'Week',planner:'Plan week',calendar:'Calendar',inbox:'Inbox',settings:'Settings'})[state.view]; }
 function navButton(view) { return `<button class="nav-btn ${state.view===view?'active':''}" data-view="${view}"><span class="icon">${ICONS[view]}</span>${view[0].toUpperCase()+view.slice(1)}</button>`; }
 function mobileButton(view) { return `<button class="${state.view===view?'active':''}" data-view="${view}"><span>${ICONS[view]}</span>${view[0].toUpperCase()+view.slice(1)}</button>`; }
 
@@ -61,7 +63,7 @@ function render() {
   }
 }
 function syncLabel(){if(!configured())return 'Local mode';if(!state.auth)return 'Sync ready · sign in';return state.syncing?'Syncing…':state.syncStatus||'Sync on';}
-function viewContent(today){switch(state.view){case 'today':return todayView(today);case 'week':return weekView(today);case 'calendar':return calendarView(today);case 'inbox':return inboxView();case 'settings':return settingsView();}}
+function viewContent(today){switch(state.view){case 'today':return todayView(today);case 'week':return weekView(today);case 'planner':return plannerView();case 'calendar':return calendarView(today);case 'inbox':return inboxView();case 'settings':return settingsView();}}
 function hero(kicker,title,subtitle,actions=''){
   const count=state.view==='today'?`<div class="pulse-strip" aria-label="Today's overview"><button data-view="week"><strong>${eventsOn(localDate(new Date())).length}</strong><span>events today</span><i>↗</i></button><button data-view="inbox"><strong>${activeEntries().filter(e=>e.kind==='task'&&!e.done&&e.dueDate&&e.dueDate<=localDate(new Date())).length}</strong><span>need attention</span><i>↗</i></button><button data-view="inbox"><strong>${activeEntries().filter(e=>e.kind==='task'&&!e.done&&!e.dueDate).length}</strong><span>in your Inbox</span><i>↗</i></button></div>`:'';
   return `<section class="hero"><div class="hero-art" aria-hidden="true"><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><span class="hero-star">✳</span></div><div class="hero-copy"><div class="eyebrow"><span class="eyebrow-line"></span>${kicker}</div><h1>${title}</h1><p>${subtitle}</p><div class="hero-actions">${actions}</div></div></section>${count}`;
@@ -97,9 +99,52 @@ function weekView(today){
   const hours=Array.from({length:24},(_,h)=>`<div class="week-time">${String(h).padStart(2,'0')}:00</div>`).join('');
   const columns=dates.map(d=>`<div class="week-day-column"><div class="week-cell-grid">${Array.from({length:24},(_,h)=>`<div class="week-slot" data-add-date="${d}" data-add-time="${String(h).padStart(2,'0')}:00"></div>`).join('')}</div><div class="week-events-layer">${scheduleOn(d).filter(e=>e.start).map(e=>weekEvent(e)).join('')}</div></div>`).join('');
   const tasks=dates.flatMap(d=>tasksOn(d).map(e=>({date:d,entry:e}))).filter(x=>!x.entry.done);
-  return `${hero('TIME, AT A GLANCE','Your week.','A familiar hourly view with room for the rest of your life.',`<button class="secondary-button" data-action="new-event">+ Add event</button>`)}<section class="card card-pad"><div class="week-toolbar"><div class="toolbar-left"><button class="icon-button" data-action="prev-week" aria-label="Previous week">←</button><button class="icon-button" data-action="next-week" aria-label="Next week">→</button><button class="pill-button" data-action="this-week">This week</button></div><div class="toolbar-title">${prettyDate(start,{month:'short',day:'numeric'})} – ${prettyDate(end,{month:'short',day:'numeric',year:'numeric'})}</div></div><div class="week-scroll"><div class="week-grid"><div class="week-head">TIME</div>${heads}<div class="week-hours">${hours}</div>${columns}</div></div></section>${tasks.length?`<section class="card card-pad" style="margin-top:18px"><div class="card-header"><h2>Due this week</h2></div><div class="list">${tasks.map(x=>taskRow(x.entry)).join('')}</div></section>`:''}`;
+  return `${hero('TIME, AT A GLANCE','Your week.','Activities and important events, together by the hour.',`<button class="secondary-button" data-action="plan-week">✦ Plan this week</button>`)}<section class="card card-pad"><div class="week-toolbar"><div class="toolbar-left"><button class="icon-button" data-action="prev-week" aria-label="Previous week">←</button><button class="icon-button" data-action="next-week" aria-label="Next week">→</button><button class="pill-button" data-action="this-week">This week</button></div><div class="toolbar-title">${prettyDate(start,{month:'short',day:'numeric'})} – ${prettyDate(end,{month:'short',day:'numeric',year:'numeric'})}</div></div><div class="week-scroll"><div class="week-grid"><div class="week-head">TIME</div>${heads}<div class="week-hours">${hours}</div>${columns}</div></div></section>${tasks.length?`<section class="card card-pad" style="margin-top:18px"><div class="card-header"><h2>Due this week</h2></div><div class="list">${tasks.map(x=>taskRow(x.entry)).join('')}</div></section>`:''}`;
 }
 function weekEvent(e){const [h,m]=e.start.split(':').map(Number);const [eh,em]=(e.end||e.start).split(':').map(Number);const top=h*56+m/60*56;const height=Math.max(27,(eh*60+em-h*60-m)/60*56-3);return `<button class="week-event ${e.kind==='event'?'important-event':''} cat-${esc(e.category||'other')}" style="top:${top}px;height:${height}px" data-edit="${esc(e.id)}" title="${esc(e.title)}">${e.kind==='event'?'✦ ':''}${esc(e.title)}<br><span style="font-weight:500">${shortTime(e.start)}${e.end?'–'+shortTime(e.end):''}</span></button>`;}
+
+function templates(){return activeEntries().filter(e=>e.kind==='template').sort((a,b)=>((a.weekday+6)%7)-((b.weekday+6)%7)||(a.start||'').localeCompare(b.start||''));}
+function openPlanner(start=state.planWeekStart){
+  if(state.planDraft&&localDate(startOfWeek(start))===localDate(state.planWeekStart)){state.view='planner';state.mascotOpen=false;render();return;}
+  if(state.planDirty&&!confirm('Discard the unsaved week draft?'))return;
+  state.planWeekStart=startOfWeek(start);
+  const first=localDate(state.planWeekStart),last=localDate(addDays(state.planWeekStart,6));
+  const current=activeEntries().filter(e=>e.kind==='activity'&&e.date>=first&&e.date<=last);
+  state.planDraft=current.map(e=>({id:e.id,date:e.date,title:e.title,start:e.start,end:e.end,category:e.category||'personal',notes:e.notes||'',templateId:e.templateId||''}));
+  state.planOriginalIds=current.map(e=>e.id);
+  state.planEditing=null;state.planAddDate=first;state.planDirty=false;state.planTab='week';state.importStatus='';state.view='planner';state.mascotOpen=false;render();
+}
+function planDays(){return Array.from({length:7},(_,i)=>localDate(addDays(state.planWeekStart,i)));}
+function planActivityForm(){
+  const draft=state.planEditing==null?{}:state.planDraft[state.planEditing]||{};
+  const first=state.planAddDate||planDays()[0];
+  return `<form id="plan-form" class="form-stack"><div class="card-header"><div><h2>${state.planEditing==null?'Add an activity':'Edit activity'}</h2><p>Shape the week one block at a time</p></div></div><label class="field">Activity<input name="title" value="${esc(draft.title||'')}" placeholder="Laundry, study, lunch…" required maxlength="120"></label><label class="field">Day<select name="date">${planDays().map(d=>`<option value="${d}" ${(draft.date||first)===d?'selected':''}>${prettyDate(parseDate(d),{weekday:'long',month:'short',day:'numeric'})}</option>`).join('')}</select></label><div class="field-row"><label class="field">From<input type="time" name="start" value="${esc(draft.start||'09:00')}" required></label><label class="field">To<input type="time" name="end" value="${esc(draft.end||'10:00')}" required></label></div><label class="field">Category<select name="category">${CATEGORIES.map(c=>`<option value="${c}" ${(draft.category||'personal')===c?'selected':''}>${cap(c)}</option>`).join('')}</select></label><label class="field">Notes<textarea name="notes" placeholder="Optional detail">${esc(draft.notes||'')}</textarea></label><div class="settings-actions"><button class="primary-button" type="submit">${state.planEditing==null?'Add to draft':'Update draft'}</button>${state.planEditing!=null?'<button class="secondary-button" type="button" data-action="plan-cancel-edit">Cancel</button>':''}</div></form>`;
+}
+function templateForm(){
+  const e=state.templateEditing?state.entries.find(x=>x.id===state.templateEditing)||{}:{};
+  return `<form id="template-form" class="form-stack"><h2>${e.id?'Edit template activity':'New template activity'}</h2><p class="muted">A template is a reusable starting point. Applying it creates editable blocks for the selected week.</p><label class="field">Activity<input name="title" value="${esc(e.title||'')}" placeholder="A regular chore or routine" required maxlength="120"></label><label class="field">Usual day<select name="weekday">${[1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${Number(e.weekday??1)===d?'selected':''}>${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d]}</option>`).join('')}</select></label><div class="field-row"><label class="field">From<input type="time" name="start" value="${esc(e.start||'09:00')}" required></label><label class="field">To<input type="time" name="end" value="${esc(e.end||'10:00')}" required></label></div><label class="field">Category<select name="category">${CATEGORIES.map(c=>`<option value="${c}" ${(e.category||'personal')===c?'selected':''}>${cap(c)}</option>`).join('')}</select></label><label class="field">Notes<textarea name="notes">${esc(e.notes||'')}</textarea></label><div class="settings-actions"><button class="primary-button" type="submit">Save template</button>${e.id?'<button class="secondary-button" type="button" data-action="template-cancel">Cancel edit</button>':''}</div></form>`;
+}
+function plannerView(){
+  const first=state.planWeekStart,last=addDays(first,6),days=planDays();
+  const eventCount=days.reduce((sum,d)=>sum+eventsOn(d).length,0);
+  const count=state.planDraft.length;
+  const top=`${hero('THE WEEK STUDIO','Make next week yours.','Build an hourly plan, then keep the important events in view.',`<button class="secondary-button" data-view="week">View hourly week →</button>`)}<div class="planner-top card card-pad"><div class="planner-week-picker"><button class="icon-button" data-action="plan-prev" aria-label="Previous planning week">←</button><div><strong>${prettyDate(first,{month:'short',day:'numeric'})} – ${prettyDate(last,{month:'short',day:'numeric',year:'numeric'})}</strong><small>${count} activities in draft · ${eventCount} important events already on Calendar</small></div><button class="icon-button" data-action="plan-next" aria-label="Next planning week">→</button><button class="pill-button" data-action="plan-upcoming">Upcoming week</button></div><div class="planner-tabs"><button class="${state.planTab==='week'?'active':''}" data-plan-tab="week">Week draft</button><button class="${state.planTab==='template'?'active':''}" data-plan-tab="template">Reusable template <span>${templates().length}</span></button></div></div>`;
+  if(state.planTab==='template')return `${top}<div class="planner-layout"><section class="card card-pad"><div class="card-header"><div><h2>Your regular activities</h2><p>Edit them here; planned weeks stay as they were saved.</p></div><button class="secondary-button" data-action="apply-template">+ Add template to draft</button></div>${templates().length?`<div class="planner-list">${templates().map(e=>`<div class="planner-item"><div><small>${DAYS[e.weekday]} · ${shortTime(e.start)}–${shortTime(e.end)}</small><strong>${esc(e.title)}</strong><span>${esc(cap(e.category||'personal'))}</span></div><button class="mini-btn" data-template-edit="${esc(e.id)}" aria-label="Edit ${esc(e.title)}">✎</button><button class="mini-btn" data-template-remove="${esc(e.id)}" aria-label="Delete ${esc(e.title)}">×</button></div>`).join('')}</div>`:'<div class="empty">Add a regular chore, class, or routine to reuse it each week.</div>'}</section><aside class="card card-pad planner-editor">${templateForm()}</aside></div>`;
+  return `${top}<div class="planner-layout"><section class="card card-pad"><div class="planner-intro"><div><h2>Week draft</h2><p>Calendar events are included below automatically. Your draft activities can be changed before saving.</p></div><div class="planner-toolbox"><button class="secondary-button" data-action="apply-template">✦ Add template</button></div></div>${state.importStatus?`<div class="status">${esc(state.importStatus)}</div>`:''}<div class="planner-days">${days.map(d=>{const blocks=state.planDraft.map((item,index)=>({...item,index})).filter(item=>item.date===d).sort((a,b)=>a.start.localeCompare(b.start));const events=eventsOn(d);return `<section class="planner-day"><div class="planner-day-heading"><strong>${prettyDate(parseDate(d),{weekday:'long',month:'short',day:'numeric'})}</strong><button class="text-button" data-plan-add="${d}">+ Activity</button></div>${events.map(e=>`<div class="planner-item planner-calendar"><div><small>✦ Important event · ${shortTime(e.start)}–${shortTime(e.end)}</small><strong>${esc(e.title)}</strong></div><button class="mini-btn" data-edit="${esc(e.id)}" aria-label="Edit event">✎</button></div>`).join('')}${blocks.map(e=>`<div class="planner-item ${state.planEditing===e.index?'selected':''}"><div><small>${shortTime(e.start)}–${shortTime(e.end)} · ${esc(cap(e.category))}${e.source==='screenshot'?' · from screenshot':''}</small><strong>${esc(e.title)}</strong></div><button class="mini-btn" data-plan-edit="${e.index}" aria-label="Edit ${esc(e.title)}">✎</button><button class="mini-btn" data-plan-remove="${e.index}" aria-label="Remove ${esc(e.title)}">×</button></div>`).join('')}${!events.length&&!blocks.length?'<div class="planner-blank">An open day. Add something when you are ready.</div>':''}</section>`}).join('')}</div><div class="planner-save"><span>${state.planDirty?'Unsaved changes':'Draft matches saved schedule'}</span><button class="primary-button" data-action="save-plan" ${!state.planDirty?'disabled':''}>Save this week</button></div></section><aside class="card card-pad planner-editor">${planActivityForm()}</aside></div>`;
+}
+function applyTemplate(){
+  const list=templates(),days=planDays();
+  let added=0;
+  for(const t of list){if(state.planDraft.some(e=>e.templateId===t.id))continue;const date=days.find(d=>parseDate(d).getDay()===t.weekday);if(!date)continue;state.planDraft.push({id:id(),kind:'activity',title:t.title,date,start:t.start,end:t.end,category:t.category,notes:t.notes||'',templateId:t.id});added++;}
+  if(added)state.planDirty=true;state.planTab='week';render();toast(added?`Added ${added} template activities to draft`:'Template activities are already in this draft');
+}
+function savePlanWeek(){
+  if(!state.planDirty){toast('No changes to save');return;}
+  const ids=new Set(state.planDraft.map(e=>e.id)),now=Date.now();
+  for(const oldId of state.planOriginalIds){if(ids.has(oldId))continue;const at=state.entries.findIndex(e=>e.id===oldId);if(at>=0)state.entries[at]={...state.entries[at],deleted:true,updatedAt:now,dirty:true};}
+  for(const draft of state.planDraft){const at=state.entries.findIndex(e=>e.id===draft.id);const next={...draft,kind:'activity',deleted:false,updatedAt:now,dirty:true};delete next.source;if(at<0)state.entries.push(next);else state.entries[at]=next;}
+  state.planOriginalIds=[...ids];state.planDirty=false;save();queueSync();toast('Week schedule saved');
+}
 
 function calendarView(today){
   const month=state.monthDate; const selected=state.selectedDate; const chosen=byDate(selected);
@@ -127,7 +172,13 @@ function scrollWeekToNow(){requestAnimationFrame(()=>{const el=document.querySel
 
 document.addEventListener('click',e=>{
   const button=e.target.closest('button,[data-action],[data-add-date]'); if(!button)return;
-  if(button.dataset.view){state.view=button.dataset.view;state.modal=null;if(state.view==='week')state.weekStart=startOfWeek(new Date());render();if(state.view==='week')scrollWeekToNow();return;}
+  if(button.dataset.view){const fromPlanner=state.view==='planner';state.view=button.dataset.view;state.modal=null;if(state.view==='week')state.weekStart=fromPlanner?new Date(state.planWeekStart):startOfWeek(new Date());render();if(state.view==='week')scrollWeekToNow();return;}
+  if(button.dataset.planTab){state.planTab=button.dataset.planTab;state.planEditing=null;render();return;}
+  if(button.dataset.planAdd){state.planEditing=null;state.planAddDate=button.dataset.planAdd;render();document.querySelector('#plan-form input[name="title"]')?.focus();return;}
+  if(button.dataset.planEdit!=null){state.planEditing=Number(button.dataset.planEdit);render();document.querySelector('#plan-form input[name="title"]')?.focus();return;}
+  if(button.dataset.planRemove!=null){state.planDraft.splice(Number(button.dataset.planRemove),1);state.planEditing=null;state.planDirty=true;render();return;}
+  if(button.dataset.templateEdit){state.templateEditing=button.dataset.templateEdit;render();document.querySelector('#template-form input[name="title"]')?.focus();return;}
+  if(button.dataset.templateRemove){const item=state.entries.find(x=>x.id===button.dataset.templateRemove);if(item&&confirm(`Delete template activity “${item.title}”?`)){upsert({...item,deleted:true});if(state.templateEditing===item.id)state.templateEditing=null;}return;}
   if(button.dataset.edit){const entry=state.entries.find(x=>x.id===button.dataset.edit);if(entry){state.modal={entry,kind:entry.kind};render();}return;}
   if(button.dataset.date){state.selectedDate=button.dataset.date;state.monthDate=firstOfMonth(parseDate(state.selectedDate));state.calendarMode='month';render();return;}
   if(button.dataset.addDate){state.modal={kind:button.dataset.addTime?'activity':'event',date:button.dataset.addDate,time:button.dataset.addTime||'09:00'};render();return;}
@@ -136,6 +187,13 @@ document.addEventListener('click',e=>{
   if(button.dataset.calendarMode){state.calendarMode=button.dataset.calendarMode;render();return;}
   const action=button.dataset.action;
   if(action==='new-task'||action==='new-event'){state.modal={kind:action==='new-task'?'task':'event'};render();}
+  if(action==='plan-week')openPlanner(state.weekStart);
+  if(action==='plan-upcoming')openPlanner(startOfWeek(addDays(new Date(),7)));
+  if(action==='plan-prev'||action==='plan-next')openPlanner(addDays(state.planWeekStart,action==='plan-next'?7:-7));
+  if(action==='apply-template')applyTemplate();
+  if(action==='save-plan')savePlanWeek();
+  if(action==='plan-cancel-edit'){state.planEditing=null;render();}
+  if(action==='template-cancel'){state.templateEditing=null;render();}
   if(action==='mascot-toggle'){state.mascotOpen=!state.mascotOpen;render();}
   if(action==='mascot-today'){state.view='today';state.mascotOpen=false;render();window.scrollTo({top:0,behavior:'smooth'});}
   if(action==='mascot-inbox'){state.view='inbox';state.mascotOpen=false;render();window.scrollTo({top:0,behavior:'smooth'});}
@@ -155,6 +213,8 @@ document.addEventListener('click',e=>{
   if(action==='install'){if(installPrompt)installPrompt.prompt();else toast('Use your browser’s Install or Add to Home Screen menu.');}
 });
 document.addEventListener('submit',async e=>{
+  if(e.target.id==='plan-form'){e.preventDefault();const f=new FormData(e.target),start=f.get('start'),end=f.get('end');if(end<=start){toast('End time must be after start time');return;}const old=state.planEditing==null?{}:state.planDraft[state.planEditing];const entry={...old,id:old.id||id(),kind:'activity',title:f.get('title').trim(),date:f.get('date'),start,end,category:f.get('category'),notes:f.get('notes').trim()};if(!entry.title)return;if(state.planEditing==null)state.planDraft.push(entry);else state.planDraft[state.planEditing]=entry;state.planEditing=null;state.planDirty=true;render();toast('Added to week draft');return;}
+  if(e.target.id==='template-form'){e.preventDefault();const f=new FormData(e.target),start=f.get('start'),end=f.get('end');if(end<=start){toast('End time must be after start time');return;}const old=state.templateEditing?state.entries.find(x=>x.id===state.templateEditing)||{}:{};upsert({...old,id:old.id||id(),kind:'template',title:f.get('title').trim(),weekday:Number(f.get('weekday')),start,end,category:f.get('category'),notes:f.get('notes').trim(),deleted:false});state.templateEditing=null;render();toast('Template saved');return;}
   if(e.target.id==='quick-form'){e.preventDefault();const title=new FormData(e.target).get('title').trim();if(title){upsert({id:id(),kind:'task',title,notes:'',category:'personal',dueDate:'',done:false,deleted:false});toast('Added to Inbox');}return;}
   if(e.target.id==='item-form'){e.preventDefault();const f=new FormData(e.target);const kind=state.modal.kind;const old=state.modal.entry||{};const title=f.get('title').trim();if(!title)return;
     if(kind==='event'||kind==='activity'){const date=f.get('date');const start=f.get('start'),end=f.get('end');const weekdays=kind==='activity'?f.getAll('weekday').map(Number):[];if(end<=start){toast('End time must be after start time');return;}if(!date&&(!weekdays.length||kind==='event')){toast(kind==='event'?'Choose an event date':'Choose a date or repeat days');return;}upsert({...old,id:old.id||id(),kind,title,date,start,end,weekdays,category:f.get('category'),notes:f.get('notes').trim(),deleted:false});}
