@@ -22,5 +22,6 @@
       { "source": "/config.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
     ]
   },
-  "firestore": { "rules": "firestore.rules" }
+  "firestore": { "rules": "firestore.rules" },
+  "auth": { "providers": { "emailPassword": true } }
 }
