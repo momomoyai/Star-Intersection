@@ -1,12 +1,28 @@
 # Star Intersection
 
-A small, dependency-free personal planner. It has a Today dashboard, an hourly week, month and year calendars with day details, and an Inbox for tasks without dates. Changes save immediately in this browser. The app shell works offline after the first visit.
+> **Star Intersection (called Star)** is a local-first personal planning app that brings an hourly weekly timetable, deadlines, calendar events, and “do later” thoughts into one calm place. It is designed for personal use across a MacBook, Windows laptop, and Android phone. **Current version: 0.1.0 (installable web prototype).**
 
-The interface uses a light observatory theme with blue, teal, violet, and soft yellow accents. Orbit, the small star mascot, shows a contextual note about due tasks or the next event and offers shortcuts to Today and quick capture. Today shows live counts for scheduled events, due tasks, and undated thoughts. Week opens near the current hour; **Now** returns there, and pressing `/` opens quick capture or the task editor.
+## Project status
+
+The planner works locally and keeps data in this browser. A Firebase sync path is implemented but requires a personal Firebase project and deployment before it can be used across devices. The current app is a PWA; a native tray app and reminders while fully closed are future work.
+
+## What works
+
+| Area | Current behavior |
+| --- | --- |
+| Today | Next event, scheduled timeline, due tasks, and quick capture |
+| Week | Hourly grid with recurring or dated events; **Now** jumps to the current hour |
+| Calendar | Month and year views; selecting a day shows its events and deadlines |
+| Inbox | Undated thoughts, dated tasks, completion, and editing |
+| Backup | JSON export and merge import |
+| Reminder | Optional daily review notification while the app is open |
+| Orbit | Contextual mascot with shortcuts to relevant views and quick capture |
+
+Press `/` to focus quick capture or open the task editor. Settings can import an editable starting timetable transcribed from the November 23–29, 2026 screenshot. Review the imported times because some merged-cell boundaries were approximate.
 
 ## Run locally
 
-From this folder:
+Requires Node.js and Python 3. From this repository:
 
 ```sh
 node scripts/build.mjs
@@ -14,26 +30,48 @@ cd dist
 python3 -m http.server 4173
 ```
 
-Open `http://localhost:4173`. Do not open `index.html` directly; offline installation and service workers need an HTTP origin. The app can be installed from a supported browser's **Install app** or **Add to Home Screen** menu.
+Open [http://localhost:4173](http://localhost:4173). On Windows, `py -m http.server 4173` can replace the last command. Re-run the build after changing source files. Serve `dist/`, not the repository root, so local environment files are not exposed by the preview server.
 
-Open **Settings → Import this week** to add the November 23–29, 2026 timetable from the screenshot. It adds dated, editable events. Some boundaries in the merged cells were approximate, so review them. The import runs only once per browser profile. **Export JSON** makes a backup; **Import JSON** merges a backup by item ID.
+The app shell becomes available offline after the first successful visit. Local plans are stored in browser storage; use **Settings → Export JSON** for a backup.
 
-## Enable sync
+## Enable cross-device sync
 
-The local app works without an account. To sync across Mac, Windows, and Android:
+1. Create a [Firebase project](https://firebase.google.com/docs/projects/billing/firebase-pricing-plans) and a Cloud Firestore database. Review the current Spark plan limits before relying on it.
+2. Enable [Email/Password Authentication](https://firebase.google.com/docs/auth/web/password-auth).
+3. Publish the contents of [firestore.rules](firestore.rules) in Firestore Rules. The rule limits each signed-in user to their own `users/{uid}/items` documents.
+4. Copy [`.env.example`](.env.example) to `.env.local`. Fill in the Firebase Web app API key and project ID. Run `node scripts/build.mjs`.
+5. Serve or deploy `dist/` over HTTPS. Sign in to Star with the same account on each device.
 
-1. Create a Firebase project on the **Spark** plan and create a Cloud Firestore database. [Firebase says Spark does not require payment information and includes no-cost quotas](https://firebase.google.com/docs/projects/billing/firebase-pricing-plans). Keep the project on Spark if you want to avoid charges.
-2. Enable **Authentication → Sign-in method → Email/Password** in the Firebase console. [Firebase's setup guide](https://firebase.google.com/docs/auth/web/password-auth).
-3. In **Firestore → Rules**, replace the rules with the contents of `firestore.rules` and publish them. The rule only lets a signed-in user access `users/{their-uid}/items`. [Firebase's rules guide](https://firebase.google.com/docs/firestore/security/rules-conditions).
-4. Register a Web app in Firebase. Put its **Web API key** and **Project ID** into the ignored `.env.local` file, using `.env.example` as the template. Run `node scripts/build.mjs` to create the browser `config.js` and the allowlisted `dist/` folder. The web API key identifies the Firebase project; the Firestore rules enforce access to private data.
-5. Host `dist/` over HTTPS. Firebase Hosting is configured to serve `dist/`. Sign in with the **same email and password** on every device. The app syncs on sign-in, when online, after edits, and every minute while open.
+For Firebase Hosting, install the official Firebase CLI, then run `firebase login`, `firebase use --add`, `node scripts/build.mjs`, and `firebase deploy --only hosting,firestore:rules` from the repository root. [firebase.json](firebase.json) serves only `dist/`.
 
-For Firebase Hosting, install the official Firebase CLI, then run `firebase login`, `firebase use --add`, `node scripts/build.mjs`, and `firebase deploy --only hosting,firestore:rules` from this folder. The app needs your project ID and your Firebase account before this deployment can be completed.
+**Configuration safety:** `.env.local`, generated `config.js`, and `dist/` are ignored by Git. The build copies only seven allowlisted browser files. The Firebase Web API key is a public browser identifier and appears in the deployed `config.js`; Firestore rules and Authentication protect private plans. Never put a password, service-account key, or other private credential in the env file. The browser stores a Firebase refresh token locally to resume sign-in, so use a private browser profile on shared computers.
 
-Sync keeps one Firestore document per item. If the same item is edited offline on two devices, the later device timestamp wins. Export backups regularly if your plans are important. Deleted items remain as small sync tombstones. Each browser profile is bound to its first sync account to prevent uploading one account's local plans into another account.
+## Data behavior
 
-## Current scope
+- Events have a date or weekly repeat days, plus a start and end time.
+- Tasks may have a due date or remain undated in the Inbox.
+- Edits save locally immediately. Sync runs after sign-in, after edits, when the device comes online, and while the app remains open.
+- Each item is one Firestore document. If two offline devices edit the same item, the later device timestamp wins. Export backups before relying on the app for critical deadlines.
+- Deletions use small tombstone records so they can sync to other devices.
 
-This is an installable web app and a working local-first prototype. Settings includes an opt-in daily review notification while the app is open. It does **not** yet provide a native desktop tray, notifications while fully closed, or a measured low-memory Tauri build. The week import is based on the screenshot, not a live Google Sheets connection. A native wrapper can use these same static files after the workflow feels right.
+## Repository map
 
-The app uses Firebase's [Authentication REST API](https://firebase.google.com/docs/reference/rest/auth/) and [Firestore REST API](https://firebase.google.com/docs/firestore/use-rest-api), so there are no package dependencies to install. The generated `config.js` is delivered to the browser, so do not place passwords, service-account keys, or private credentials in `.env.local`. It stores the Firebase refresh token in this browser's local storage so your session can resume; use a private browser profile on a shared computer.
+| Path | Purpose |
+| --- | --- |
+| [app.js](app.js), [styles.css](styles.css) | Planner behavior and interface |
+| [index.html](index.html), [manifest.webmanifest](manifest.webmanifest), [sw.js](sw.js) | App shell, installation, offline cache |
+| [scripts/generate-config.mjs](scripts/generate-config.mjs) | Read ignored env settings and generate local browser config |
+| [scripts/build.mjs](scripts/build.mjs) | Copy only approved browser assets into `dist/` |
+| [firebase.json](firebase.json), [firestore.rules](firestore.rules) | Hosting and per-user data rules |
+
+## Next milestones
+
+- Configure Firebase and test edits made offline on two real devices.
+- Improve timetable import from Google Sheets instead of relying on a screenshot transcription.
+- Prototype a low-memory desktop tray wrapper and measure RAM use.
+- Add reminders that work when the desktop app is closed, plus Android notification support.
+- Add account recovery and clearer sync conflict handling.
+
+## Change log
+
+- **0.1.0 — 2026-11-24:** First local-first planner, light observatory interface, Orbit mascot, optional Firebase sync path, and allowlisted build.
